@@ -10,5 +10,6 @@ wheels/
 .venv
 .env
 
-# macOS
 .DS_Store
+*.db-shm
+*.db
