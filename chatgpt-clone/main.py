@@ -3,12 +3,15 @@ import dotenv
 dotenv.load_dotenv()
 from openai import OpenAI
 import asyncio
+import base64
 import streamlit as st
-from agents import Agent, Runner, SQLiteSession, WebSearchTool, FileSearchTool
+from agents import Agent, Runner, SQLiteSession, WebSearchTool, FileSearchTool, ImageGenerationTool, CodeInterpreterTool
 
 client = OpenAI()
 # OpenAI Agent SDK에서는 Hosted Tools라는 것을 제공함.
 # OpenAI에서 미리 정의해둔 내장 에이전트 도구이며, 이들은 내 컴퓨터가 아니라 OpenAI 서버에서 구동됨. (WebSearchTool, FileSearchTool 등등)
+
+# ---
 
 # FileSearchTool
 # OpenAI에는 파일을 저장할 수 있는 스토리지가 있으며, agent는 유저가 질문할 때마다 그 스토리지에 들어가서 파일을 읽을 수 있음.
@@ -17,6 +20,27 @@ VECTOR_STORE_ID = "vs_6a2ffc988cdc8191a8016140e04df2cb"
 # 2. 파일 업로드 : `prompt = st.chat_input("Write a message for your assistant", accept_file=True, file_type=["txt"])`
 # 3. 스토리지 저장 : `if prompt:` 아래 확인.
 # 4. 스토리지에 저장한 파일들을 에이전트가 연결된 vector store로 넣어주어야 함. 
+
+# ---
+
+# 멀티모달 : 에이전트가 텍스트 뿐만 아니라 이미지 같은 것도 처리, 내장된 기능이기 때문에 별도 tool 불필요
+# 이미지를 base64로 인코딩해서 메모리에 추가하면 됨.(이미지를 하나의 거대한 문자열로 인코딩)
+
+# ---
+
+# ImageGenerationTool
+# 이미지 생성 툴, tool_config 필요.
+# 에이전트에 이미지 생성 요청 시 이벤트를 받음.
+# tool_config에 particial_image 설정을 추가하면 이벤트와 함께 받을 수 있음.
+# 빈 이미지 placeholder 생성, 
+
+# ---
+
+# CodeInterpreterTool
+# LLM이 내 컴퓨터와 격리된 별도 환경인 샌드박스 환경에서 코드를 실행.
+# AI가 질문에 답하기 위해 코드를 작성하고 실행해야 할 때 동작함.
+
+# ---
 
 # app 실행 후 한번만 에이전트 생성
 if "agent" not in st.session_state:
@@ -30,13 +54,31 @@ if "agent" not in st.session_state:
             Use this to learn about current events.
           - File Search Tool: Use this tool when the user asks a question about facts related to themselves.
             Or when they ask questions about specific files.
+          - Code Interpreter Tool: Use this tool when you need write and run code to answer the user's question.
         """,
         tools=[
             WebSearchTool(),
             FileSearchTool(
                 vector_store_ids=[VECTOR_STORE_ID],  # 사용자마다 각각의 vector store를 만들 수 있음.
                 max_num_results=3,  # 스토어의 파일 중 상위 3개 파일만 가져옴.
-            )
+            ),
+            ImageGenerationTool(
+                tool_config={
+                    "type": "image_generation", # 필수 옵션
+                    "quality": "medium",  # 생성 이미지 품질
+                    "output_format": "jpeg",  # 이미지 확장자
+                    "moderation": "low",
+                    "partial_images": 1  # 이미지 생성 과정
+                }
+            ),
+            CodeInterpreterTool(
+                tool_config={
+                    "type": "code_interpreter",  # 필수 옵션
+                    "container": {
+                        "type": "auto"
+                    }
+                }
+            ),
         ]
     )
 
@@ -58,17 +100,36 @@ async def paint_history():
         if "role" in message:
             with st.chat_message(message["role"]):  # dict 이기 때문에 이와 같이 가져와야함. message.role (x)
                 if message["role"] == "user":
-                    st.write(message["content"])
+                    content = message["content"]
+                    # content가 문자열이면
+                    if isinstance(content, str):
+                        st.write(content)
+                    # content가 list이면    
+                    elif isinstance(content, list):
+                        for part in content:
+                            if "image_url" in part:
+                                st.image(part["image_url"])
                 else:
                     if message["type"] == "message":
                         st.write(message["content"][0]["text"].replace("$", "\$"))
         if "type" in message:
-            if message["type"] == "web_search_call":
+            message_type = message["type"]
+            if message_type == "web_search_call":
                 with st.chat_message('ai'):
                     st.write("🚀 Search the Web...")
-            elif message["type"] == "file_search_call":
+            elif message_type == "file_search_call":
                 with st.chat_message("ai"):
                     st.write("📃 Searched your files...")
+            # 이미지 생성 history 처리        
+            elif message_type == "image_generation_call":
+                image = base64.b64decode(message["result"])
+                with st.chat_message("ai"):
+                    st.image(image)
+            # 실행 코드
+            elif message_type == "code_interpreter_call":
+                with st.chat_message("ai"):
+                    st.code(message["code"])
+
 
 # 메세지를 보내고 리렌더링 될때마다 대화 기록을 그리고 있기 때문에 이전 대화목록을 확인할 수 있음 (순서 중요.)
 asyncio.run(paint_history())
@@ -82,7 +143,15 @@ def update_status(status_container, event):
         'response.web_search_call.searching': ("⏳ Web search in progress... ", "running"),
         'response.file_search_call.completed': ("✅ File search completed.", "complete"),
         'response.file_search_call.in_progress': ("📃 Starting file search...", "running"),
-        'response.file_search_call.searching': ("⏳ File search in progress... ", "running")
+        'response.file_search_call.searching': ("⏳ File search in progress... ", "running"),
+        'response.image_generation_call.generating': ("🎨 Drawing image...", "running"),
+        'response.image_generation_call.in_progress': ("🎨 Drawing image...", "running"),
+        'response.code_interpreter_call_code.done': ("🧑🏻‍💻 Ran code.", "complete"),
+        'response.code_interpreter_call.completed': ("🧑🏻‍💻 Ran code.", "complete"),
+        'response.code_interpreter_call.in_progress': ("🧑🏻‍💻 Running code.", "complete"),
+        'response.code_interpreter_call.interpreting': ("🧑🏻‍💻 Running code.", "complete"),
+        'response.completed': (" ", "complete")
+
     }
 
     if event in status_messages:
@@ -93,9 +162,18 @@ def update_status(status_container, event):
 async def run_agent(message):
     with st.chat_message("ai"):
         status_container = st.status("⏳", expanded=False)
-        # AI 답변을 위한 컨테이너를 delta로 채워서 GPT와 같이 응답하도록.
+        # AI 답변을 위한 컨테이너를 delta로 채워서 GPT와 같이 응답하도록.(delta는 생성과정을 모두 보여줌. 안 / 녕하 / 세 / 요. 와 같은 식, 이를 하나의 공간에 담기위함.)
+        code_placeholder = st.empty()
+        image_placeholder = st.empty()
         text_placeholder = st.empty()
         response = ""
+        code_response = ""
+
+        # 유저가 새로운 메세지를 보낼 때만 컨테이너를 비워주고 싶음.
+        # 이를 위해 placeholder들을 session에 캐싱
+        st.session_state["code_placeholder"] = code_placeholder
+        st.session_state["image_placeholder"] = image_placeholder
+        st.session_state["text_placeholder"] = text_placeholder
 
         stream = Runner.run_streamed(
             agent,
@@ -112,19 +190,40 @@ async def run_agent(message):
                     response += event.data.delta
                     text_placeholder.write(response.replace("$", "\$"))
 
+                # delta는 모델이 코드를 작성하고 있는 상태.
+                if event.data.type == "response.code_interpreter_call_code.delta":
+                    code_response += event.data.delta
+                    # code 라는 메서드는 단순히 텍스트만 그리는게 아니라 syntax highlight가 적용된 code를 보여주는 streamlit 메서드
+                    code_placeholder.code(code_response)
+
+                # Image Generate Event
+                elif event.data.type == "response.image_generation_call.partial_image":
+                    # 이미지 생성 시 base64로 받기 때문에 디코딩 과정이 필요.
+                    image = base64.b64decode(event.data.partial_image_b64)
+                    image_placeholder.image(image)
+                
+
 prompt = st.chat_input(
     "Write a message for your assistant",
     accept_file=True,
-    file_type=["txt"]
+    file_type=["txt", "jpg", "jpeg", "png"]
 )
 
 # streamlit에선 interaction이 발생할 때마다 전체가 리렌더링
 if prompt:
+    # 사용자의 새로운 메세지가 입력되면 기존 placeholder 초기화
+    if "code_placeholder" in st.session_state:
+        st.session_state["code_placeholder"].empty()
+    if "image_placeholder" in st.session_state:
+        st.session_state["image_placeholder"].empty()
+    if "text_placeholder" in st.session_state:
+        st.session_state["text_placeholder"].empty()
+
     # text 뿐만 아니라 파일도 받으므로 ..
     for file in prompt.files:
         if file.type.startswith("text/"):
             with st.chat_message("ai"):
-                with st.status("Uploading file...") as status:
+                with st.status("⏳ Uploading file...") as status:
                     # 파일 업로드하면 OpenAI 스토리지에 저장
                     uploaded_file = client.files.create(
                         file=(file.name, file.getvalue()),
@@ -135,7 +234,36 @@ if prompt:
                         vector_store_id=VECTOR_STORE_ID,
                         file_id=uploaded_file.id
                     )
-                    status.update(label="File uploaded", state="complete")
+                    status.update(label="✅ File uploaded", state="complete")
+        # 이미지 업로드
+        elif file.type.startswith("image/"):
+            with st.status("⏳ Uploading image...") as status:
+                file_bytes = file.getvalue()
+                # image encoding
+                base64_data = base64.b64encode(file_bytes).decode("utf-8")
+                # AI Model를 위한 URI 생성
+                data_uri = f"data:{file.type};base64,{base64_data}"
+                # 메모리에 이미지 추가
+                asyncio.run(
+                    session.add_items(
+                        [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "input_image",
+                                        "detail": "auto",
+                                        "image_url": data_uri
+                                    }
+                                ]
+                            }
+                        ]
+                    )
+                )
+                status.update(label="✅ Image uploaded", state="complete")
+            # 사용자에게 업로드된 이미지를 보여줌    
+            with st.chat_message("human"):
+                st.image(data_uri)
 
     if prompt.text:
         with st.chat_message("human"):
