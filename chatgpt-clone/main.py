@@ -1,9 +1,14 @@
 import dotenv
 
 dotenv.load_dotenv()
+from openai import OpenAI
 import asyncio
 import streamlit as st
-from agents import Agent, Runner, SQLiteSession, WebSearchTool
+from agents import Agent, Runner, SQLiteSession, WebSearchTool, FileSearchTool
+
+client = OpenAI()
+
+VECTOR_STORE_ID = "vs_6a2ffc988cdc8191a8016140e04df2cb"
 
 if "agent" not in st.session_state:
     st.session_state["agent"] = Agent(
@@ -12,9 +17,16 @@ if "agent" not in st.session_state:
         너는 Life Coach Assistant야.
         사용자의 질문에 맞춰 동기부여 콘텐츠, 자기 개발 팁, 습관 형성 조언을 무조건 아래 도구를 활용해서 응답해줘.
 
-        - Web Search Tool
+        - Web Search Tool : 이 툴을 사용하여 개인화된 추천을 제공하고 사용자 질문에 관련된 정보를 검색
+        - File Search Tool : Use this tool when the user asks a question about facts related to themselves. Or when they ask questions about specific
         """,
-        tools=[WebSearchTool()]
+        tools=[
+            WebSearchTool(),
+            FileSearchTool(
+                vector_store_ids=[VECTOR_STORE_ID],
+                max_num_results=3
+            )
+        ]
     )
 
 agent = st.session_state["agent"]
@@ -39,6 +51,9 @@ async def paint_history():
             if message["type"] == "web_search_call":
                 with st.chat_message("ai"):
                     st.write("🚀 웹 검색 ...")
+            elif message["type"] == "file_search_call":
+                with st.chat_message("ai"):
+                    st.write("📂 파일 검색 ...")
 
 asyncio.run(paint_history())
 
@@ -47,6 +62,10 @@ def update_status(status_container, event):
         'response.web_search_call.completed': ("✅ 웹 검색 완료", "complete"),
         'response.web_search_call.in_progress': ("🤖 웹 검색 시작...", "running"),
         'response.web_search_call.searching': ("⏳ 웹 검색 중... ", "running"),
+        'response.file_search_call.completed': ("✅ 파일 검색 완료", "complete"),
+        'response.file_search_call.in_progress': ("📃 파일 검색 시작...", "running"),
+        'response.file_search_call.searching': ("⏳ 파일 검색 중... ", "running"),
+        'response.completed': (" ", "complete")
     }
 
     if event in status_messages:
@@ -68,8 +87,9 @@ async def run_agent(message):
         async for event in stream.stream_events():
             if event.type == "run_item_stream_event":
                 if event.name == "tool_called":
-                    query = event.item.raw_item.action.query
-                    status_container.update(label=f"🔍 웹 검색: {query}", state="complete")
+                    if hasattr(event.item.raw_item, "action"):
+                        query = event.item.raw_item.action.query
+                        status_container.update(label=f"🔍 웹 검색: {query}", state="complete")
             if event.type == "raw_response_event":
                 update_status(status_container, event.data.type)
 
@@ -77,12 +97,27 @@ async def run_agent(message):
                     response += event.data.delta
                     text_placeholder.write(response)
 
-prompt = st.chat_input("최근 고민이 무엇인가요?")
+prompt = st.chat_input("최근 고민이 무엇인가요?", accept_file=True, file_type=["txt"])
 
 if prompt:
-    with st.chat_message("human"):
-        st.write(prompt)
-    asyncio.run(run_agent(prompt))
+    for file in prompt.files:
+        if file.type.startswith("text/"):
+            with st.chat_message("ai"):
+                with st.status("⏳ 파일 업로드 중...") as status:
+                    uploaded_file = client.files.create(
+                        file=(file.name, file.getvalue()),
+                        purpose="user_data"
+                    )
+                    status.update(label="Attaching File...")
+                    client.vector_stores.files.create(
+                        vector_store_id=VECTOR_STORE_ID,
+                        file_id=uploaded_file.id
+                    )
+                    status.update(label="✅ File uploaded", state="complete")
+    if prompt.text:
+        with st.chat_message("human"):
+            st.write(prompt.text)
+        asyncio.run(run_agent(prompt.text))
 
 with st.sidebar:
     reset = st.button("메모리 초기화")
