@@ -19,7 +19,7 @@ client = OpenAI()
 VECTOR_STORE_ID = "vs_6a2ffc988cdc8191a8016140e04df2cb"
 # 2. 파일 업로드 : `prompt = st.chat_input("Write a message for your assistant", accept_file=True, file_type=["txt"])`
 # 3. 스토리지 저장 : `if prompt:` 아래 확인.
-# 4. 스토리지에 저장한 파일들을 에이전트가 연결된 vector store로 넣어주어야 함. 
+# 4. 스토리지에 저장한 파일들을 에이전트가 연결된 vector store로 넣어주어야 함.
 
 # ---
 
@@ -32,7 +32,7 @@ VECTOR_STORE_ID = "vs_6a2ffc988cdc8191a8016140e04df2cb"
 # 이미지 생성 툴, tool_config 필요.
 # 에이전트에 이미지 생성 요청 시 이벤트를 받음.
 # tool_config에 particial_image 설정을 추가하면 이벤트와 함께 받을 수 있음.
-# 빈 이미지 placeholder 생성, 
+# 빈 이미지 placeholder 생성,
 
 # ---
 
@@ -104,7 +104,7 @@ async def paint_history():
                     # content가 문자열이면
                     if isinstance(content, str):
                         st.write(content)
-                    # content가 list이면    
+                    # content가 list이면
                     elif isinstance(content, list):
                         for part in content:
                             if "image_url" in part:
@@ -120,7 +120,7 @@ async def paint_history():
             elif message_type == "file_search_call":
                 with st.chat_message("ai"):
                     st.write("📃 Searched your files...")
-            # 이미지 생성 history 처리        
+            # 이미지 생성 history 처리
             elif message_type == "image_generation_call":
                 image = base64.b64decode(message["result"])
                 with st.chat_message("ai"):
@@ -148,8 +148,8 @@ def update_status(status_container, event):
         'response.image_generation_call.in_progress': ("🎨 Drawing image...", "running"),
         'response.code_interpreter_call_code.done': ("🧑🏻‍💻 Ran code.", "complete"),
         'response.code_interpreter_call.completed': ("🧑🏻‍💻 Ran code.", "complete"),
-        'response.code_interpreter_call.in_progress': ("🧑🏻‍💻 Running code.", "complete"),
-        'response.code_interpreter_call.interpreting': ("🧑🏻‍💻 Running code.", "complete"),
+        'response.code_interpreter_call.in_progress': ("🧑🏻‍💻 Running code.", "running"),
+        'response.code_interpreter_call.interpreting': ("🧑🏻‍💻 Running code.", "running"),
         'response.completed': (" ", "complete")
 
     }
@@ -201,7 +201,14 @@ async def run_agent(message):
                     # 이미지 생성 시 base64로 받기 때문에 디코딩 과정이 필요.
                     image = base64.b64decode(event.data.partial_image_b64)
                     image_placeholder.image(image)
-                
+
+            # tool_called 이벤트는 모든 종류의 툴 호출에서 발생.
+            # raw_item의 클래스가 툴마다 다름. 예를 들어 FileSearchTool에는 action 속성이 없음.
+            if event.type == "run_item_stream_event":
+                if event.name == "tool_called":
+                    if hasattr(event.item.raw_item, "action"):
+                        query = event.item.raw_item.action.query
+                        status_container.update(label=f"🔍 웹 검색: {query}", state="running")
 
 prompt = st.chat_input(
     "Write a message for your assistant",
@@ -261,7 +268,7 @@ if prompt:
                     )
                 )
                 status.update(label="✅ Image uploaded", state="complete")
-            # 사용자에게 업로드된 이미지를 보여줌    
+            # 사용자에게 업로드된 이미지를 보여줌
             with st.chat_message("human"):
                 st.image(data_uri)
 
@@ -269,10 +276,10 @@ if prompt:
         with st.chat_message("human"):
             st.write(prompt.text)
         # Runner에 prompt를 담아서 실행
-        asyncio.run(run_agent(prompt.text)) 
+        asyncio.run(run_agent(prompt.text))
 
 # 메모리 삭제 버튼
-# session.get_items()는 corutine 이기 때문에 await 키워드를 사용해야 하는데 
+# session.get_items()는 corutine 이기 때문에 await 키워드를 사용해야 하는데
 # async 함수 밖이라 await를 사용할 수 없음.
 # 이런 경우 asyncio.run() 을 사용하면 await 와 같은 역할을 함.
 with st.sidebar:
