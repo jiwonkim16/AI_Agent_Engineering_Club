@@ -5,7 +5,8 @@ from openai import OpenAI
 import asyncio
 import base64
 import streamlit as st
-from agents import Agent, Runner, SQLiteSession, WebSearchTool, FileSearchTool, ImageGenerationTool, CodeInterpreterTool
+from agents import Agent, Runner, SQLiteSession, WebSearchTool, FileSearchTool, ImageGenerationTool, CodeInterpreterTool, HostedMCPTool
+from agents.mcp.server import MCPServerStdio
 
 client = OpenAI()
 # OpenAI Agent SDK에서는 Hosted Tools라는 것을 제공함.
@@ -42,9 +43,36 @@ VECTOR_STORE_ID = "vs_6a2ffc988cdc8191a8016140e04df2cb"
 
 # ---
 
+# MCP
+# HostedMCPTool : OpenAI의 서버에서 실행되며, 원격의 MCP 서버를 호출
+#  - URL만 알면 됨.
+# MCPServerStdio : 로컬에서 돌아가는 MCP 서버를 추가하는 것, stdio 발음은 스탠다드io
+#  - from agents.mcp.server import MCPServerStdio 로 import
+#  - 로컬에서 실행하기 위한 명령어가 필요.
+#    - "yahoo-finance": {
+#         "command": "uvx",
+#         "args": ["mcp-yahoo-finance"]
+#       }
+#  - uvx란 npx와 같이 설치 없이 바로 실행하는 것 / uv와 npm은 설치 후 실행
+
+# ---
+
 # app 실행 후 한번만 에이전트 생성
 if "agent" not in st.session_state:
+    
+    # 에이전트 생성 시 우선 로컬 MCP 서버가 실행되도록 해야 함.
+    # 이렇게 로컬 mcp를 사용하는 경우 위와 같은 캐싱을 사용할 수 없음. 왜냐하면 서버를 계속 실행되게 해두고 agent를 만들 때 실행 중인 서버를 넘겨주어야 하기 때문.
+    # 
+    # yfinance_server = MCPServerStdio(
+    #     params={
+    #         "command": "uvx",
+    #         "args": ["mcp-yahoo-finance"]
+    #     }
+    # )
+
     st.session_state["agent"] = Agent(
+        # 로컬 mcp 서버 명시, 여러 mcp 서버를 연결 할땐 아래 배열에 추가만 해주면 됨.
+        # mcp_servers=[yfinance_server]
         name="ChatGPT Clone",
         instructions="""
         You are a helpful assistant.
@@ -75,10 +103,20 @@ if "agent" not in st.session_state:
                 tool_config={
                     "type": "code_interpreter",  # 필수 옵션
                     "container": {
-                        "type": "auto"
+                        "type": "auto",
+                        # "file_ids": [""]   스토리지에 업로드한 file id를 명시해서 모델이 코드를 작성할 때, 파일에 접근할 수 있는 권한을 줌.
                     }
                 }
             ),
+            HostedMCPTool(
+                tool_config={
+                    "server_url": "https://mcp.context7.com/mcp",
+                    "type": "mcp",
+                    "server_label": "Context_7",
+                    "server_description": "Use this to get the docs from software projects.",
+                    "require_approval": "never"  # mcp 사용 전 승인단계 해제
+                }
+            )
         ]
     )
 
@@ -129,6 +167,12 @@ async def paint_history():
             elif message_type == "code_interpreter_call":
                 with st.chat_message("ai"):
                     st.code(message["code"])
+            elif message_type == "mcp_list_tools":
+                with st.chat_message("ai"):
+                    st.write(f"Listed {message["server_label"]}'s Tools")
+            elif message_type == "mcp_call":
+                with st.chat_message("ai"):
+                    st.write(f"Called {message["server_label"]}'s {message["name"]}")
 
 
 # 메세지를 보내고 리렌더링 될때마다 대화 기록을 그리고 있기 때문에 이전 대화목록을 확인할 수 있음 (순서 중요.)
@@ -150,6 +194,12 @@ def update_status(status_container, event):
         'response.code_interpreter_call.completed': ("🧑🏻‍💻 Ran code.", "complete"),
         'response.code_interpreter_call.in_progress': ("🧑🏻‍💻 Running code.", "running"),
         'response.code_interpreter_call.interpreting': ("🧑🏻‍💻 Running code.", "running"),
+        "response.mcp_call.completed": ("⚒️ Called MCP tool", "complete"),
+        "response.mcp_call.failed": ("⚒️ Error calling MCP tool", "complete"),
+        "response.mcp_call.in_progress": ("⚒️ Calling MCP tool...", "running"),
+        "response.mcp_list_tools.completed": ("⚒️ Listed MCP tools", "complete"),
+        "response.mcp_list_tools.failed": ("⚒️ Error listing MCP tools", "complete"),
+        "response.mcp_list_tools.in_progress": ("⚒️ Listing MCP tools", "running"),
         'response.completed': (" ", "complete")
 
     }
