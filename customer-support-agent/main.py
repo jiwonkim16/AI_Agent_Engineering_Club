@@ -4,7 +4,7 @@ dotenv.load_dotenv()
 from openai import OpenAI
 import asyncio
 import streamlit as st
-from agents import InputGuardrailTripwireTriggered, Runner, SQLiteSession
+from agents import InputGuardrailTripwireTriggered, Runner, SQLiteSession, OutputGuardrailTripwireTriggered
 from models import UserAccountContext
 from my_agents.triage_agent import triage_agent
 
@@ -35,6 +35,8 @@ if "session" not in st.session_state:
     )
 session = st.session_state["session"]
 
+if "agent" not in st.session_state:
+    st.session_state["agent"] = triage_agent
 
 async def paint_history():
     messages = await session.get_items()
@@ -61,7 +63,7 @@ async def run_agent(message):
 
         try:
             stream = Runner.run_streamed(
-                triage_agent,
+                st.session_state["agent"],
                 message,
                 session=session,
                 context=user_account_ctx,  # context 인스턴스를 Runner에서 사용. 자동으로 에이전트에게 전달되는 것은 아님. 이제 모든 function_tool들이 context를 다 받게 됨.
@@ -73,9 +75,22 @@ async def run_agent(message):
                     if event.data.type == "response.output_text.delta":
                         response += event.data.delta
                         text_placeholder.write(response.replace("$", "\$"))
+
+                elif event.type == "agent_updated_stream_event":
+                    if st.session_state["agent"].name != event.new_agent.name:
+                        st.write(f"🤖 Transfered from {st.session_state["agent"].name} to {event.new_agent.name}")
+                        st.session_state["agent"] = event.new_agent
+                        text_placeholder = st.empty()
+                        response = ""
+
         # 입력 가드레일 예외 발생 처리                
         except InputGuardrailTripwireTriggered:
             st.write("I can't help you with that.")
+
+        # 출력 가드레일 예외
+        except OutputGuardrailTripwireTriggered:
+            st.write("Cant show you that answer.")
+            st.session_state["text_placeholder"].empty()
 
 
 message = st.chat_input(
