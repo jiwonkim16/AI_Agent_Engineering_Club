@@ -146,7 +146,8 @@ def make_handoff(agent):
     return handoff(
         agent=agent,
         on_handoff=handle_handoff,
-        input_type=HandoffData, # AI 모델에게 이 handoff가 왜 발생했는지 설명???
+        # AI 모델이 handoff를 호출 할때, HandoffData의 필드를 직접 채워서 tool 인자로 생성, 그 객체가 on_handoff 콜백의 input_data로 전달됨
+        input_type=HandoffData,
         input_filter=handoff_filters.remove_all_tools, # 새로운 에이전트가 볼 데이터를 골라서 넘길 수 있게 해주는 필터. (extension에서 import)
         # 이 경우 에이전트가 호출했던 tool 사용 기록을 지워주고 유저와 에이전트 간 메세지만 남김.
     )
@@ -158,6 +159,8 @@ triage_agent = Agent(
      # instructions 시그니처를 보면 문자열을 넘길 수도 있고 RunContextWrapper와 에이전트를 매개변수로 받는 함수를 넘길 수도 있음.
      # 에이전트까지 호출하는 이유는 여러 에이전트에서 해당 함수가 사용될 수 있기 때문.
     instructions=dynamic_triage_agent_instructions,
+
+    # input guardrail은 첫번째(진입) 에이전트에서만 실행됨. handoff로 넘어간 다른 에이전트에는 적용되지 않음.
     input_guardrails=[
         off_topic_guardrail
     ], # 이렇게 해두면 triage_agent가 실행되기 전에 off_topic_guardrail 함수가 먼저 실행됨.
