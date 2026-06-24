@@ -7,6 +7,7 @@ import streamlit as st
 from agents import (
     InputGuardrailTripwireTriggered,
     MaxTurnsExceeded,
+    OutputGuardrailTripwireTriggered,
     Runner,
     SQLiteSession,
 )
@@ -68,6 +69,7 @@ async def run_agent(message):
                             "Menu_Agent": "메뉴 전문가",
                             "Order_Agent": "주문 담당자",
                             "Reservation_Agent": "예약 담당자",
+                            "Complaints_Agent": "고객 지원 담당자",
                         }.get(event.new_agent.name, event.new_agent.name)
 
                         st.info(f"{display_name}에게 연결합니다...")
@@ -77,6 +79,9 @@ async def run_agent(message):
 
         except InputGuardrailTripwireTriggered:
             st.write("저는 그 부분에 대해 도움을 드릴 수 없습니다.")
+
+        except OutputGuardrailTripwireTriggered:
+            st.write("잘못된 답변 입니다.")
 
         except MaxTurnsExceeded:
             st.error("에이전트 연결이 반복되어 요청을 완료하지 못했습니다.")
@@ -99,6 +104,7 @@ AGENT_LABELS = {
     "Menu_Agent": ("🍽️", "메뉴 전문가"),
     "Order_Agent": ("📝", "주문 담당자"),
     "Reservation_Agent": ("📅", "예약 담당자"),
+    "Complaints_Agent": ("🙇", "고객 지원 담당자"),
 }
 
 with st.sidebar:

@@ -1,6 +1,7 @@
 # 메뉴, 재료, 알레르기 관련 질문에 답변
 from agents import Agent, RunContextWrapper
 
+from guard.output_guardrail import validate_output_guardrail
 from models import RestaurantContext
 
 
@@ -40,4 +41,5 @@ menu_agent = Agent(
     name="Menu_Agent",
     handoff_description="메뉴, 가격, 재료, 채식 여부, 알레르기 및 메뉴 추천을 담당한다.",
     instructions=dynamic_menu_agent_instructions,
+    output_guardrails=[validate_output_guardrail],
 )

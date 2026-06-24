@@ -1,6 +1,7 @@
 # 주문을 받고 확인하는 에이전트
 from agents import Agent, RunContextWrapper
 
+from guard.output_guardrail import validate_output_guardrail
 from models import RestaurantContext
 from tools import add_to_order, confirm_order
 
@@ -28,4 +29,5 @@ order_agent = Agent(
     handoff_description="메뉴 주문, 수량 변경, 장바구니 및 주문 확인을 담당한다.",
     instructions=dynamic_order_agent_instructions,
     tools=[add_to_order, confirm_order],
+    output_guardrails=[validate_output_guardrail],
 )

@@ -1,6 +1,7 @@
 # 테이블 예약 처리하는 에이전트
 from agents import Agent, RunContextWrapper
 
+from guard.output_guardrail import validate_output_guardrail
 from models import RestaurantContext
 from tools import confirm_reservation
 
@@ -27,4 +28,5 @@ reservation_agent = Agent(
     handoff_description="테이블 예약과 예약 인원수, 날짜 및 시간을 담당한다.",
     instructions=dynamic_reservation_agent_instructions,
     tools=[confirm_reservation],
+    output_guardrails=[validate_output_guardrail],
 )
