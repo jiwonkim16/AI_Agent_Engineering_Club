@@ -13,3 +13,6 @@ wheels/
 .DS_Store
 *.db-shm
 *.db
+*.db-wal
+
+.streamlit/secrets.toml
