@@ -25,4 +25,6 @@ news_analyst = Agent(
     tools=[
         web_search_tool,
     ],
+    # agent가 state에 데이터를 저장하는 방법
+    output_key="news_analyst_result",
 )
