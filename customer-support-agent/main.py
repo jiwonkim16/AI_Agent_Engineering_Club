@@ -131,6 +131,10 @@ AGENT_LABELS = {
 
 
 async def run_agent(message):
+    # 가드레일/최대턴 초과로 응답이 차단되면 True를 반환한다.
+    # 이 안내 메시지들은 세션 DB에 저장되지 않으므로, 호출부에서 st.rerun()을
+    # 건너뛰어야 rerun 후 DB 기준 재렌더에서 메시지가 사라지지 않는다.
+    blocked = False
     with st.chat_message("assistant", avatar="🍅"):
         text_placeholder = st.empty()
         response = ""
@@ -163,19 +167,24 @@ async def run_agent(message):
                         response = ""
 
         except InputGuardrailTripwireTriggered:
+            blocked = True
             text_placeholder.write(
                 "🍅 Mi dispiace! 저희 Tomato Kitchen은 메뉴·주문·예약·문의만 도와드릴 수 있어요."
             )
 
         except OutputGuardrailTripwireTriggered:
+            blocked = True
             text_placeholder.write(
                 "🍅 Mi dispiace! 지금은 답변을 도와드리기 어려워요. 메뉴·주문·예약·문의로 다시 말씀해 주세요!"
             )
 
         except MaxTurnsExceeded:
+            blocked = True
             st.error(
                 "🍅 담당자 연결이 반복되어 요청을 완료하지 못했어요. 다시 시도해 주세요!"
             )
+
+    return blocked
 
 
 @st.fragment
@@ -199,10 +208,12 @@ def chat_area():
     if pending:
         with st.chat_message("user", avatar="🍽️"):
             st.write(pending)
-        asyncio.run(run_agent(pending))
-        # 생성 완료 후 DB 기준으로 화면을 정리하고 사이드바(handoff 로그)도 갱신한다.
-        # 이 rerun은 생성이 끝난 뒤라 빠르게 지나가 잔상을 만들지 않는다.
-        st.rerun()
+        blocked = asyncio.run(run_agent(pending))
+        # 차단(가드레일/최대턴) 안내 메시지는 세션 DB에 없으므로, rerun하면
+        # DB 기준 재렌더에서 사라진다. 이 경우 rerun을 건너뛰어 화면에 유지한다.
+        # 정상 응답은 DB에 저장되므로, 생성 완료 후 rerun으로 화면·사이드바를 동기화한다.
+        if not blocked:
+            st.rerun()
 
 
 chat_area()
