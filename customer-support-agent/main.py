@@ -15,11 +15,12 @@ from agents import (
     Runner,
     SQLiteSession,
 )
+
 from models import RestaurantContext
 from my_agents.triage_agent import triage_agent
 
 if "ctx" not in st.session_state:
-    st.session_state["ctx"] = RestaurantContext(customer_id=1, name="toma")
+    st.session_state["ctx"] = RestaurantContext(customer_id=1, name="")
 ctx = st.session_state["ctx"]
 
 if "session_id" not in st.session_state:
@@ -93,6 +94,19 @@ st.markdown(
 st.title("🍅 Tomato Kitchen")
 st.caption("토마토 전문 트라토리아 · 메뉴·주문·예약·문의를 도와드려요")
 
+# 이름 게이트: 성함을 받기 전에는 채팅을 열지 않는다 (트라토리아 입구에서 호스트가 맞이하는 흐름).
+if not ctx.name:
+    st.info(
+        "👨🏻‍🍳 Benvenuti! 토마토 전문 트라토리아 Tomato Kitchen입니다.\n\n먼저 성함을 알려주시면 정성껏 모시겠습니다!"
+    )
+    with st.form("name_gate"):
+        name_input = st.text_input("성함", placeholder="예: 지원")
+        submitted = st.form_submit_button("입장하기", use_container_width=True)
+    if submitted and name_input.strip():
+        ctx.name = name_input.strip()
+        st.rerun()
+    st.stop()
+
 
 async def paint_history():
     messages = await session.get_items()
@@ -107,16 +121,6 @@ async def paint_history():
                         st.write(message["content"][0]["text"].replace("$", r"\$"))
     return len(messages)
 
-
-history_count = asyncio.run(paint_history())
-if history_count == 0:
-    st.info("""
-👨🏻‍🍳 Benvenuti! 토마토 전문 트라토리아 Tomato Kitchen입니다!
-
-🍅 저희는 토마토로 만든 요리만 정성껏 준비해요.
-
-🍽️ 메뉴 추천 · 📝 주문 · 📅 예약 · 🙇 문의를 도와드릴게요!
-""")
 
 AGENT_LABELS = {
     "Menu_Agent": ("🍽️", "메뉴 전문가"),
@@ -169,17 +173,46 @@ async def run_agent(message):
             )
 
         except MaxTurnsExceeded:
-            st.error("🍅 담당자 연결이 반복되어 요청을 완료하지 못했어요. 다시 시도해 주세요!")
+            st.error(
+                "🍅 담당자 연결이 반복되어 요청을 완료하지 못했어요. 다시 시도해 주세요!"
+            )
 
 
-message = st.chat_input(
-    "🍅 무엇을 도와드릴까요? (메뉴 · 주문 · 예약 · 문의)",
-)
+@st.fragment
+def chat_area():
+    # 과거 대화 + 응답 생성을 fragment로 격리한다.
+    # 응답 생성(느린 부분)이 fragment 안에 있어, 생성 중 과거 대화 전체가
+    # 다시 그려지며 흐려지는 잔상(rerun-fade)이 사라진다.
+    # chat_input은 fragment 밖(base level)에 있어야 하단 고정되므로,
+    # 입력값은 session_state["pending_message"]로 전달받는다.
+    history_count = asyncio.run(paint_history())
+    if history_count == 0:
+        st.info(f"""
+👨🏻‍🍳 {ctx.name}님, 어서 오세요! Tomato Kitchen입니다.
 
-if message:
-    with st.chat_message("user", avatar="🍽️"):
-        st.write(message)
-    asyncio.run(run_agent(message))
+🍅 저희는 토마토로 만든 요리만 정성껏 준비해요.
+
+🍽️ 메뉴 추천 · 📝 주문 · 📅 예약 · 🙇 문의를 도와드릴게요!
+""")
+
+    pending = st.session_state.pop("pending_message", None)
+    if pending:
+        with st.chat_message("user", avatar="🍽️"):
+            st.write(pending)
+        asyncio.run(run_agent(pending))
+        # 생성 완료 후 DB 기준으로 화면을 정리하고 사이드바(handoff 로그)도 갱신한다.
+        # 이 rerun은 생성이 끝난 뒤라 빠르게 지나가 잔상을 만들지 않는다.
+        st.rerun()
+
+
+chat_area()
+
+# chat_input은 base level에 둬야 화면 하단에 자동 고정된다.
+# 입력을 pending에 담으면 chat_input 제출이 일으킨 rerun의 다음 패스에서
+# 위 chat_area()가 이를 처리한다.
+if prompt := st.chat_input("🍅 무엇을 도와드릴까요? (메뉴 · 주문 · 예약 · 문의)"):
+    st.session_state["pending_message"] = prompt
+    st.rerun()
 
 with st.sidebar:
     st.markdown("### 🍅 Tomato Kitchen")
