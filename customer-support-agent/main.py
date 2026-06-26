@@ -4,7 +4,7 @@ import uuid
 
 import streamlit as st
 
-st.set_page_config(page_title="Restaurant Agent", page_icon="👨🏻‍🍳", layout="centered")
+st.set_page_config(page_title="Tomato Kitchen", page_icon="🍅", layout="centered")
 
 os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
 
@@ -31,15 +31,75 @@ if "session" not in st.session_state:
     )
 session = st.session_state["session"]
 
-st.title("Tomato Kitchen")
-st.caption("메뉴·주문·예약·문의를 도와드려요")
+st.markdown(
+    """
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=Nunito:wght@400;600;700&display=swap');
+
+    /* 강렬한 토마토 배경: 따뜻한 베이스 + 선명한 토마토 도트 */
+    [data-testid="stAppViewContainer"] {
+        background-color: #FCEAD9;
+        background-image: radial-gradient(#E8704F 1px, transparent 1.2px);
+        background-size: 20px 20px;
+    }
+
+    /* 본문 폰트 */
+    html, body, [class*="st-"] { font-family: 'Nunito', sans-serif; }
+
+    /* 타이틀: 굵은 serif + 강렬한 토마토 레드 */
+    h1 {
+        font-family: 'Playfair Display', serif !important;
+        font-weight: 900 !important;
+        color: #C0241B;
+        letter-spacing: 0.5px;
+    }
+    h2, h3 { font-family: 'Playfair Display', serif !important; color: #C0241B; }
+
+    /* 채팅 버블 공통: 흰 카드 + 굵은 토마토 레드 왼쪽 바 */
+    [data-testid="stChatMessage"] {
+        background-color: #FFFFFF;
+        border-left: 6px solid #C0241B;
+        border-radius: 14px;
+        padding: 0.8rem 1.1rem;
+        margin-bottom: 0.7rem;
+        box-shadow: 0 3px 12px rgba(192, 36, 27, 0.12);
+    }
+
+    /* 입력창: 토마토 레드 테두리 강조 */
+    [data-testid="stChatInput"] {
+        border: 2px solid #C0241B;
+        border-radius: 12px;
+    }
+    [data-testid="stChatInput"]:focus-within {
+        box-shadow: 0 0 0 3px rgba(192, 36, 27, 0.2);
+    }
+
+    /* 환영/안내 info 박스: 토마토 톤 */
+    [data-testid="stAlertContainer"] {
+        background-color: #FFF3EC;
+        border-left: 6px solid #E8704F;
+    }
+
+    /* 사이드바: 따뜻한 베이지 + 우측 토마토 라인 */
+    [data-testid="stSidebar"] {
+        background-color: #F6E3CF;
+        border-right: 3px solid #C0241B;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.title("🍅 Tomato Kitchen")
+st.caption("토마토 전문 트라토리아 · 메뉴·주문·예약·문의를 도와드려요")
 
 
 async def paint_history():
     messages = await session.get_items()
     for message in messages:
         if "role" in message:
-            with st.chat_message(message["role"]):
+            avatar = "🍅" if message["role"] == "assistant" else "🍽️"
+            with st.chat_message(message["role"], avatar=avatar):
                 if message["role"] == "user":
                     st.write(message["content"])
                 else:
@@ -51,9 +111,11 @@ async def paint_history():
 history_count = asyncio.run(paint_history())
 if history_count == 0:
     st.info("""
-👨🏻‍🍳 어서오세요, Tomato Kitchen입니다!
+👨🏻‍🍳 Benvenuti! 토마토 전문 트라토리아 Tomato Kitchen입니다!
 
-🍽️ 메뉴 추천 · 📝 주문 · 📅 예약 · 🙇 문의를 도와드려요!
+🍅 저희는 토마토로 만든 요리만 정성껏 준비해요.
+
+🍽️ 메뉴 추천 · 📝 주문 · 📅 예약 · 🙇 문의를 도와드릴게요!
 """)
 
 AGENT_LABELS = {
@@ -65,7 +127,7 @@ AGENT_LABELS = {
 
 
 async def run_agent(message):
-    with st.chat_message("assistant"):
+    with st.chat_message("assistant", avatar="🍅"):
         text_placeholder = st.empty()
         response = ""
         current_agent = triage_agent
@@ -98,33 +160,45 @@ async def run_agent(message):
 
         except InputGuardrailTripwireTriggered:
             text_placeholder.write(
-                "🍅 죄송해요, 저는 Tomato Kitchen의 메뉴·주문·예약·문의만 도와드릴 수 있어요."
+                "🍅 Mi dispiace! 저희 Tomato Kitchen은 메뉴·주문·예약·문의만 도와드릴 수 있어요."
             )
 
         except OutputGuardrailTripwireTriggered:
             text_placeholder.write(
-                "🍅 죄송합니다, 지금은 답변을 도와드리기 어려워요. 메뉴·주문·예약·문의로 다시 요청해 주세요!"
+                "🍅 Mi dispiace! 지금은 답변을 도와드리기 어려워요. 메뉴·주문·예약·문의로 다시 말씀해 주세요!"
             )
 
         except MaxTurnsExceeded:
-            st.error("🍅 에이전트 연결이 반복되어 요청을 완료하지 못했습니다.")
+            st.error("🍅 담당자 연결이 반복되어 요청을 완료하지 못했어요. 다시 시도해 주세요!")
 
 
 message = st.chat_input(
-    "🍅 메뉴 및 예약, 주문 내용을 입력해주세요.",
+    "🍅 무엇을 도와드릴까요? (메뉴 · 주문 · 예약 · 문의)",
 )
 
 if message:
-    with st.chat_message("user"):
+    with st.chat_message("user", avatar="🍽️"):
         st.write(message)
     asyncio.run(run_agent(message))
 
 with st.sidebar:
-    st.markdown("### 👨🏻‍🍳 Tomato Kitchen")
-    st.caption("상담 연결 내역")
-    st.divider()
+    st.markdown("### 🍅 Tomato Kitchen")
 
     logs = st.session_state.get("handoff_logs", [])
+
+    # 지금 모시는 담당
+    st.caption("지금 모시는 담당")
+    if logs:
+        cur_icon, cur_label = AGENT_LABELS.get(
+            logs[-1]["to_agent"], ("🤖", logs[-1]["to_agent"])
+        )
+        st.markdown(f"## {cur_icon} {cur_label}")
+    else:
+        st.markdown("## 👨🏻‍🍳 호스트")
+        st.caption("무엇을 도와드릴까요?")
+
+    st.divider()
+    st.caption("연결 내역")
 
     if not logs:
         st.caption("아직 연결된 담당자가 없어요.")
@@ -138,7 +212,6 @@ with st.sidebar:
         with st.container(border=True):
             st.markdown(f"**{icon} {label}**  ·  `#{order}`")
             st.write(log["summary"])
-            st.caption(f"이유: {log['reason']}")
 
     st.divider()
     if st.button("대화 초기화", use_container_width=True):

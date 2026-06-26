@@ -23,6 +23,12 @@ async def off_topic_guardrail(
     agent: Agent[RestaurantContext],
     input: str,
 ):
+    # 세션 사용 시 input에는 대화 히스토리(list)가 통째로 들어온다.
+    # 과거 off-topic 발화가 현재 판정을 오염시키지 않도록 마지막 user 발화만 검사한다.
+    if isinstance(input, list):
+        user_messages = [m["content"] for m in input if m.get("role") == "user"]
+        input = user_messages[-1] if user_messages else ""
+
     result = await Runner.run(input_guardrail_agent, input, context=wrapper.context)
 
     return GuardrailFunctionOutput(

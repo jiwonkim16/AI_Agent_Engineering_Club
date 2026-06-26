@@ -1,0 +1,7 @@
+[theme]
+# Tomato Kitchen — 강렬한 트라토리아
+primaryColor = "#C0241B"          # 강렬한 토마토 레드 (버튼·위젯·강조)
+backgroundColor = "#FCEAD9"       # 따뜻한 크림 (메인 배경)
+secondaryBackgroundColor = "#F6E3CF"  # 따뜻한 베이지 (사이드바)
+textColor = "#3A2A20"             # 진한 에스프레소 브라운 (텍스트)
+font = "serif"
