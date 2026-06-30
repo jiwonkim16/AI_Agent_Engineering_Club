@@ -12,3 +12,8 @@ wheels/
 
 # macOS
 .DS_Store
+
+.streamlit
+*.db
+*.db-shm
+.adk
