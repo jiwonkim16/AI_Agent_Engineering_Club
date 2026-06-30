@@ -10,6 +10,7 @@ client = OpenAI()
 async def generate_images(tool_context: ToolContext):
     story = tool_context.state.get("story_output")
     pages = story["pages"]
+    character = story["character"]
 
     existing_artifacts = await tool_context.list_artifacts()
     generated_images = []
@@ -17,6 +18,7 @@ async def generate_images(tool_context: ToolContext):
     for page in pages:
         page_num = page["page"]
         visual = page["visual"]
+        prompt = f"{character}. 이 장면: {visual}"
         filename = f"page_{page_num}.png"
 
         if filename in existing_artifacts:
@@ -24,7 +26,7 @@ async def generate_images(tool_context: ToolContext):
             continue
 
         image = client.images.generate(
-            model="gpt-image-1", prompt=visual, n=1, size="1024x1024"
+            model="gpt-image-1", prompt=prompt, n=1, size="1024x1024"
         )
 
         image_bytes = base64.b64decode(image.data[0].b64_json)

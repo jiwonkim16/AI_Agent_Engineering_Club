@@ -20,6 +20,7 @@ class PageOutput(BaseModel):
 
 class StoryOutput(BaseModel):
     theme: str
+    character: str
     pages: List[PageOutput]
 
 
