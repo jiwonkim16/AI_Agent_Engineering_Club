@@ -14,7 +14,7 @@ MODEL = LiteLlm(model="openai/gpt-4o")
 
 def before_image_generate(tool, args, tool_context: ToolContext):
     page_num = args["page_num"]
-    tool_context.state["progress"] = f"🎇 이미지 {page_num}/5 생성 중..."
+    print(f"🎇 이미지 {page_num}/5 생성 중...")
     return None
 
 

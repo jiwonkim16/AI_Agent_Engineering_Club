@@ -27,7 +27,7 @@ class StoryOutput(BaseModel):
 
 
 def before_story_writing(callback_context: CallbackContext):
-    callback_context.state["progress"] = "📝 스토리 작성 중..."
+    print("📝 스토리 작성 중...")
     return None
 
 

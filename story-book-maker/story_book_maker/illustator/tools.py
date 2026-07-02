@@ -1,5 +1,4 @@
 import base64
-import time
 
 from google.adk.tools.tool_context import ToolContext
 from google.genai import types
@@ -22,11 +21,9 @@ async def generate_images_for_page(tool_context: ToolContext, page_num: int):
     if filename in existing_artifacts:
         return {"page": page_num, "filename": filename}
 
-    print(f"[page] {page_num} 시작: {time.strftime('%H:%M:%S')}")
     image = await client.images.generate(
         model="gpt-image-1", prompt=prompt, n=1, size="1024x1024", quality="low"
     )
-    print(f"[page] {page_num} 끝: {time.strftime('%H:%M:%S')}")
 
     image_bytes = base64.b64decode(image.data[0].b64_json)
 
